@@ -24,6 +24,7 @@
 #include <TH1F.h>
 #include <TLorentzVector.h>
 #include <TDirectory.h>
+#include <TString.h>
 using namespace std;
 
 class BSM_Analysis {

@@ -28,11 +28,12 @@ int main (int argc, char *argv[])
   // theDirectory[2] = OutputHistos->mkdir("cut_2");
   // theDirectory[3] = OutputHistos->mkdir("cut_3");
 
-  int nDir = 2;
+  int nDir = 4;
   TDirectory *theDirectory[nDir];
   theDirectory[0] = OutputHistos->mkdir("AfterMuonChargeProduct");
   theDirectory[1] = OutputHistos->mkdir("AfterTau_decayModeFinding");
- 
+  theDirectory[2] = OutputHistos->mkdir("Tau_againstMuonLoose3"); 
+  theDirectory[3] = OutputHistos->mkdir("Tau_againstMuonTight3");
   // The "argv[1]" argument, is the location+name of the input file 
   // the user will run over. This parameter is also passed to the code 
   // from the console, and it is the first parameter to be passed to the code. 
@@ -100,11 +101,13 @@ BSM_Analysis::BSM_Analysis(TFile* theFile, TDirectory *cdDir[], int nDir, char* 
       double tau_max_pt = 0.0;
       bool found_tag_muon = false;
       bool found_probe_tau = false;
+
       // Loop over muons:
       for (int j = 0; j < Muon_pt->size(); j++)
 	{
 	  // select tag and probe candidates 
-	  if ((abs(Muon_eta->at(j)) < 2.4) && (Muon_pt->at(j) > 25.0) && (Muon_tight->at(j) == 1) && (Muon_isoSum->at(j) < 2.0) && (pass_trigger)){
+	  if ((abs(Muon_eta->at(j)) < 2.1) && (Muon_pt->at(j) > 25.0) && (Muon_tight->at(j) == 1) && (Muon_isoSum->at(j) < (0.1*Muon_pt->at(j))) && 
+              (pass_trigger)){
 	    TagMuon_TL_vec.SetPtEtaPhiE(Muon_pt->at(j), Muon_eta->at(j), Muon_phi->at(j), Muon_energy->at(j));
 	    charge_tag_muon = Muon_charge->at(j);
             found_tag_muon = true;
@@ -116,39 +119,35 @@ BSM_Analysis::BSM_Analysis(TFile* theFile, TDirectory *cdDir[], int nDir, char* 
               ProbeTau_TL_vec.SetPtEtaPhiE(Tau_pt->at(t), Tau_eta->at(t), Tau_phi->at(t), Tau_energy->at(t));
               double DeltaR_muon_tau = TagMuon_TL_vec.DeltaR(ProbeTau_TL_vec);
 	      double charge_product = (Muon_charge->at(j))*(Tau_charge->at(t));
-              if ((DeltaR_muon_tau > 0.5) && (charge_product < 0) && (Tau_pt->at(t) > 20) && (abs(Tau_eta->at(t)) > 2.3)){
-	      if( Tau_decayModeFinding->at(t) == 1){
+              if ((DeltaR_muon_tau > 0.5) && (charge_product < 0) && (Tau_pt->at(t) > 20.) && (abs(Tau_eta->at(t)) < 2.1)){
+
+              pass_tau_id[0] = 1;
+
+	      if( Tau_decayModeFindingNewDMs->at(t) == 1){
 		pass_tau_id[1] = 1;
 	      }
+              if ((pass_tau_id[1] == 1) && (Tau_againstMuonLoose3->at(t) == 1)){
+                pass_tau_id[2] = 1;
+              }
+              if ((pass_tau_id[1] == 1) && (Tau_againstMuonTight3->at(t) == 1)){
+                pass_tau_id[3] = 1;
+              }
               found_probe_tau = true;
               break;
               }
 	    }
-           if (found_probe_tau){ 
-             break;
-            }
+           if (found_probe_tau){break;}
 	}
       
-      _hmap_events[0]->Fill(0.0);
       float diLepmass = (ProbeTau_TL_vec + TagMuon_TL_vec).M();
-
-      if (diLepmass > 20.){
-	_hmap_events[0]->Fill(1.0);
-	_hmap_diLepton_mass[0]->Fill((TagMuon_TL_vec + ProbeTau_TL_vec).M());
-	_hmap_probe_tau_pT[0]->Fill(ProbeTau_TL_vec.Pt());
-	_hmap_probe_tau_eta[0]->Fill(ProbeTau_TL_vec.Eta());
-	_hmap_diLepton_mass_fail[0]->Fill((TagMuon_TL_vec + ProbeTau_TL_vec).M());
-	_hmap_probe_tau_pT_fail[0]->Fill(ProbeTau_TL_vec.Pt());
-	_hmap_probe_tau_eta_fail[0]->Fill(ProbeTau_TL_vec.Eta());
-      }
-      for (int i = 1; i < nDir; i++){
+      for (int i = 0; i < nDir; i++){
 	_hmap_events[i]->Fill(0.0);
-	if ((diLepmass > 20.) && (pass_tau_id[i] == 1)){
+	if (pass_tau_id[i] == 1){
 	  _hmap_events[i]->Fill(1.0);
 	  _hmap_diLepton_mass[i]->Fill((TagMuon_TL_vec + ProbeTau_TL_vec).M());
 	  _hmap_probe_tau_pT[i]->Fill(ProbeTau_TL_vec.Pt());
 	  _hmap_probe_tau_eta[i]->Fill(ProbeTau_TL_vec.Eta());
-	} else if ((diLepmass > 20.) && (pass_tau_id[i] == 0)) {
+	} else if (pass_tau_id[i] == 0) {
 	  _hmap_events[i]->Fill(2.0);
 	  _hmap_diLepton_mass_fail[i]->Fill((TagMuon_TL_vec + ProbeTau_TL_vec).M());
 	  _hmap_probe_tau_pT_fail[i]->Fill(ProbeTau_TL_vec.Pt());
@@ -187,7 +186,7 @@ void BSM_Analysis::createHistoMaps (int directories)
   for (int i = 0; i < directories; i++)
     {
       // Events histogram
-      _hmap_events[i]             = new TH1F("Events",         "Events", 3, 0., 3.);
+      _hmap_events[i]             = new TH1F("Events",        "Events", 3, 0., 3.);
       // Tau distributions
       _hmap_diLepton_mass[i]      = new TH1F("diLepMass",     "m_{#mu, #tau}", 300., 0., 300.); 
       _hmap_probe_tau_pT[i]       = new TH1F("tau_pT",        "#tau p_{T}",    300, 0., 300.);
