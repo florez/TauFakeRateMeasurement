@@ -34,6 +34,8 @@ public :
 
    // create Histo maps
    void createHistoMaps (int);
+   // for Gen Muons
+   int GetGoodGenMuons();
    // Define maps for histograms
    std::map<unsigned int, TH1*> _hmap_events;
    // For muons
@@ -145,6 +147,14 @@ public :
    vector<double>  *Jet_electronEnergy;
    vector<double>  *Jet_photonEnergy;
    vector<double>  *UncorrJet_pt;
+   vector<double>  *Gen_pt;
+   vector<double>  *Gen_eta;
+   vector<double>  *Gen_phi;
+   vector<double>  *Gen_energy;
+   vector<double>  *Gen_pdg_id;
+   vector<double>  *Gen_motherpdg_id;
+   vector<double>  *Gen_status;
+
    Int_t           npuVertices;
    Float_t         trueInteractions;
    Int_t           ootnpuVertices;
@@ -161,6 +171,13 @@ public :
    Double_t        Met_shiftedPtDown;
 
    // List of branches
+   TBranch        *b_Gen_pt;   //!
+   TBranch        *b_Gen_eta;   //!
+   TBranch        *b_Gen_phi;   //!
+   TBranch        *b_Gen_energy;   //!
+   TBranch        *b_Gen_pdg_id;   //!
+   TBranch        *b_Gen_motherpdg_id;   //!
+   TBranch        *b_Gen_status;   //!
    TBranch        *b_Trigger_names;
    TBranch        *b_Trigger_decision;
    TBranch        *b_Muon_pt;   //!
