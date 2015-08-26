@@ -32,7 +32,7 @@ int main (int argc, char *argv[])
   TDirectory *theDirectory[nDir];
   theDirectory[0] = OutputHistos->mkdir("AfterMuonChargeProduct");
   theDirectory[1] = OutputHistos->mkdir("AfterTau_decayModeFinding");
-  theDirectory[2] = OutputHistos->mkdir("Tau_byTightCombinedIsolationDeltaBetaCorr3Hits");
+  theDirectory[2] = OutputHistos->mkdir("Tau_byLooseCombinedIsolationDeltaBetaCorr3Hits");
   theDirectory[3] = OutputHistos->mkdir("Tau_againstMuonLoose3"); 
   theDirectory[4] = OutputHistos->mkdir("Tau_againstMuonTight3");
   // The "argv[1]" argument, is the location+name of the input file 
