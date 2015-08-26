@@ -28,12 +28,13 @@ int main (int argc, char *argv[])
   // theDirectory[2] = OutputHistos->mkdir("cut_2");
   // theDirectory[3] = OutputHistos->mkdir("cut_3");
 
-  int nDir = 4;
+  int nDir = 5;
   TDirectory *theDirectory[nDir];
   theDirectory[0] = OutputHistos->mkdir("AfterMuonChargeProduct");
   theDirectory[1] = OutputHistos->mkdir("AfterTau_decayModeFinding");
-  theDirectory[2] = OutputHistos->mkdir("Tau_againstMuonLoose3"); 
-  theDirectory[3] = OutputHistos->mkdir("Tau_againstMuonTight3");
+  theDirectory[2] = OutputHistos->mkdir("Tau_byTightCombinedIsolationDeltaBetaCorr3Hits");
+  theDirectory[3] = OutputHistos->mkdir("Tau_againstMuonLoose3"); 
+  theDirectory[4] = OutputHistos->mkdir("Tau_againstMuonTight3");
   // The "argv[1]" argument, is the location+name of the input file 
   // the user will run over. This parameter is also passed to the code 
   // from the console, and it is the first parameter to be passed to the code. 
@@ -64,10 +65,10 @@ BSM_Analysis::BSM_Analysis(TFile* theFile, TDirectory *cdDir[], int nDir, char* 
   TFile *f = TFile::Open(fname);
   f->cd("TNT");
   TTree* BOOM = (TTree*)f->Get("TNT/BOOM");
-
+  
   int nentries = (int) BOOM->GetEntries();
   setBranchAddress(BOOM);
-
+  
   for (int i = 0; i < nentries; ++i)
     {
       BOOM->GetEntry(i);
@@ -77,7 +78,8 @@ BSM_Analysis::BSM_Analysis(TFile* theFile, TDirectory *cdDir[], int nDir, char* 
       // TLorentz vector to calculate the di-jet invariant mass
       TLorentzVector TagMuon_TL_vec(0., 0., 0., 0.); 
       TLorentzVector ProbeTau_TL_vec(0., 0., 0., 0.);
-      
+      TLorentzVector TagGenMuon_TL_vec(0., 0., 0., 0.);
+      TLorentzVector ProbeGenMuon_TL_vec(0., 0., 0., 0.); 
       double charge_tag_muon = 0.;
       double charge_tau = 0.;
       // This array is used to store the information 
@@ -87,6 +89,8 @@ BSM_Analysis::BSM_Analysis(TFile* theFile, TDirectory *cdDir[], int nDir, char* 
       bool pass_trigger = false;
       
       // For Trigger
+      int Nmuons = GetGoodGenMuons();
+      if (Nmuons < 1) continue;
       for (int tr = 0 ; tr < Trigger_decision->size(); tr++){
 	string theTriggers = Trigger_names->at(tr);
 	string myTrigger   = "HLT_IsoMu24";
@@ -101,55 +105,99 @@ BSM_Analysis::BSM_Analysis(TFile* theFile, TDirectory *cdDir[], int nDir, char* 
       double tau_max_pt = 0.0;
       bool found_tag_muon = false;
       bool found_probe_tau = false;
-
+      
+      double DeltaR_muon_gen_init = 100000.;
       // Loop over muons:
       for (int j = 0; j < Muon_pt->size(); j++)
 	{
-	  // select tag and probe candidates 
-	  if ((abs(Muon_eta->at(j)) < 2.1) && (Muon_pt->at(j) > 25.0) && (Muon_tight->at(j) == 1) && (Muon_isoSum->at(j) < (0.1*Muon_pt->at(j))) && 
+          // Requiere at least two reconstructed muons in the event
+          if (Muon_pt->size() < 2) continue;
+	  // The Tagged muon must satisfy the criteria below
+	  if ((abs(Muon_eta->at(j)) < 2.3) && (Muon_pt->at(j) > 25.0) && (Muon_tight->at(j) == 1) && (Muon_isoSum->at(j) < (0.1*Muon_pt->at(j))) && 
               (pass_trigger)){
+            // if the muon passes the above requirements, then look for the GenLevel 
+            // muon closest to the reco muon candidate
 	    TagMuon_TL_vec.SetPtEtaPhiE(Muon_pt->at(j), Muon_eta->at(j), Muon_phi->at(j), Muon_energy->at(j));
 	    charge_tag_muon = Muon_charge->at(j);
-            found_tag_muon = true;
+            for(int g = 0; g < Gen_pt->size(); g++) {
+              if((abs(Gen_pdg_id->at(g)) == 13) && (Gen_status->at(g) != 3)) {
+                if( (Gen_pt->at(g) > 20.0) && (abs(Gen_eta->at(g)) < 2.3) ) {
+                  TagGenMuon_TL_vec.SetPtEtaPhiE(Gen_pt->at(g), Gen_eta->at(g), Gen_phi->at(g), Gen_energy->at(g));
+                  double DeltaR_muon_gen = TagMuon_TL_vec.DeltaR(TagGenMuon_TL_vec);
+                  if (DeltaR_muon_gen < DeltaR_muon_gen_init){
+                    DeltaR_muon_gen_init = DeltaR_muon_gen;
+                    TagGenMuon_TL_vec.SetPtEtaPhiE(Gen_pt->at(g), Gen_eta->at(g), Gen_phi->at(g), Gen_energy->at(g));
+                    TagMuon_TL_vec.SetPtEtaPhiE(Muon_pt->at(j), Muon_eta->at(j), Muon_phi->at(j), Muon_energy->at(j));
+                  }
+                }
+              }
+            }
+            // if the Gen and the Reco muon have a DR < 0.3, then look for a probe tau.
+            if (DeltaR_muon_gen_init < 0.3 ) found_tag_muon = true;
 	  } 
-          if (!found_tag_muon){continue;}
-	  // Now we loop over the taus in the event, if any 
-	  for (int t = 0; t < Tau_pt->size(); t++)
-	    {
-              ProbeTau_TL_vec.SetPtEtaPhiE(Tau_pt->at(t), Tau_eta->at(t), Tau_phi->at(t), Tau_energy->at(t));
-              double DeltaR_muon_tau = TagMuon_TL_vec.DeltaR(ProbeTau_TL_vec);
-	      double charge_product = (Muon_charge->at(j))*(Tau_charge->at(t));
-              if ((DeltaR_muon_tau > 0.5) && (charge_product < 0) && (Tau_pt->at(t) > 20.) && (abs(Tau_eta->at(t)) < 2.1)){
-
-              pass_tau_id[0] = 1;
-
-	      if( Tau_decayModeFindingNewDMs->at(t) == 1){
-		pass_tau_id[1] = 1;
+          if (found_tag_muon){
+	    // Now we loop over the taus in the event, if any 
+	    DeltaR_muon_gen_init = 100000.;
+	    for (int t = 0; t < Tau_pt->size(); t++)
+	      {
+		ProbeTau_TL_vec.SetPtEtaPhiE(Tau_pt->at(t), Tau_eta->at(t), Tau_phi->at(t), Tau_energy->at(t));
+		double DeltaR_muon_tau = TagMuon_TL_vec.DeltaR(ProbeTau_TL_vec);
+		double charge_product = (Muon_charge->at(j))*(Tau_charge->at(t));
+                // The tag muon should be well separated w.r.t the probe tau
+		if ((DeltaR_muon_tau > 0.5) && (Tau_pt->at(t) > 20.) && (abs(Tau_eta->at(t)) < 2.3)){
+		  // Now look for a Gen muon, different to the one matches to the tagged muon
+		  // and find the one closes to the probe tau
+		  for(int g = 0; g < Gen_pt->size(); g++) {
+		    if((abs(Gen_pdg_id->at(g)) == 13) && (Gen_status->at(g) != 3)) {
+		      if( (Gen_pt->at(g) > 20.0) && (abs(Gen_eta->at(g)) < 2.3) ) {
+			ProbeGenMuon_TL_vec.SetPtEtaPhiE(Gen_pt->at(g), Gen_eta->at(g), Gen_phi->at(g), Gen_energy->at(g));
+			if ( (ProbeGenMuon_TL_vec.DeltaR(TagGenMuon_TL_vec)) > 0.3 ){
+			  double DeltaR_muon_gen = ProbeTau_TL_vec.DeltaR(ProbeGenMuon_TL_vec);
+			  if (DeltaR_muon_gen < DeltaR_muon_gen_init){
+			    DeltaR_muon_gen_init = DeltaR_muon_gen;
+			    ProbeGenMuon_TL_vec.SetPtEtaPhiE(Gen_pt->at(g), Gen_eta->at(g), Gen_phi->at(g), Gen_energy->at(g));
+			    ProbeTau_TL_vec.SetPtEtaPhiE(Tau_pt->at(t), Tau_eta->at(t), Tau_phi->at(t), Tau_energy->at(t));
+			  }
+			} 
+		      }
+		    }
+		  }
+		}
+                // if the probe tau has a DR < 0.3 w.r.t a GenMuon then look if the tau passes 
+                // the following tauID cuts 
+		if (DeltaR_muon_gen_init < 0.3){
+		  pass_tau_id[0] = 1;
+		  
+		  if( Tau_decayModeFindingNewDMs->at(t) == 1){
+		    pass_tau_id[1] = 1;
+		  }
+		  if ( (pass_tau_id[1] == 1) && (Tau_byLooseCombinedIsolationDeltaBetaCorr3Hits->at(t) == 1)){
+		    pass_tau_id[2] = 1;
+		  }
+		  if ((pass_tau_id[2] == 1) && (Tau_againstMuonLoose3->at(t) == 1)){
+		    pass_tau_id[3] = 1;
+		  }
+		  if ((pass_tau_id[2] == 1) && (Tau_againstMuonTight3->at(t) == 1)){
+		    pass_tau_id[4] = 1;
+		  }
+		  found_probe_tau = true;            
+		}
+		if (found_probe_tau) break;
 	      }
-              if ((pass_tau_id[1] == 1) && (Tau_againstMuonLoose3->at(t) == 1)){
-                pass_tau_id[2] = 1;
-              }
-              if ((pass_tau_id[1] == 1) && (Tau_againstMuonTight3->at(t) == 1)){
-                pass_tau_id[3] = 1;
-              }
-              found_probe_tau = true;
-              break;
-              }
-	    }
-           if (found_probe_tau){break;}
+          }
 	}
       
       float diLepmass = (ProbeTau_TL_vec + TagMuon_TL_vec).M();
       for (int i = 0; i < nDir; i++){
 	_hmap_events[i]->Fill(0.0);
-	if (pass_tau_id[i] == 1){
+	if ((pass_tau_id[i] == 1)){
 	  _hmap_events[i]->Fill(1.0);
-	  _hmap_diLepton_mass[i]->Fill((TagMuon_TL_vec + ProbeTau_TL_vec).M());
+	  _hmap_diLepton_mass[i]->Fill(diLepmass);
 	  _hmap_probe_tau_pT[i]->Fill(ProbeTau_TL_vec.Pt());
 	  _hmap_probe_tau_eta[i]->Fill(ProbeTau_TL_vec.Eta());
 	} else if (pass_tau_id[i] == 0) {
 	  _hmap_events[i]->Fill(2.0);
-	  _hmap_diLepton_mass_fail[i]->Fill((TagMuon_TL_vec + ProbeTau_TL_vec).M());
+	  _hmap_diLepton_mass_fail[i]->Fill(diLepmass);
 	  _hmap_probe_tau_pT_fail[i]->Fill(ProbeTau_TL_vec.Pt());
 	  _hmap_probe_tau_eta_fail[i]->Fill(ProbeTau_TL_vec.Eta());
 	}
@@ -157,7 +205,9 @@ BSM_Analysis::BSM_Analysis(TFile* theFile, TDirectory *cdDir[], int nDir, char* 
 
       ProbeTau_TL_vec.Clear();
       TagMuon_TL_vec.Clear();
-      
+      TagGenMuon_TL_vec.Clear();
+      ProbeGenMuon_TL_vec.Clear();
+ 
     }
   theFile->cd();
 
@@ -195,6 +245,18 @@ void BSM_Analysis::createHistoMaps (int directories)
       _hmap_probe_tau_pT_fail[i]  = new TH1F("tau_pT_fail",   "#tau p_{T}",    300, 0., 300.);
       _hmap_probe_tau_eta_fail[i] = new TH1F("tau_eta_fail",  "#tau #eta",     50, -2.5, 2.5);    
     }
+}
+
+int BSM_Analysis::GetGoodGenMuons() {
+    int nGenMuons = 0;
+    for(int j = 0; j < Gen_pt->size(); j++) {
+      if((abs(Gen_pdg_id->at(j)) == 13) && (Gen_status->at(j) != 3)) {
+        if( (Gen_pt->at(j) > 20.0) && (abs(Gen_eta->at(j)) < 2.3) ) {
+          nGenMuons++;
+        }
+      }
+    }
+  return nGenMuons;
 }
 
 void BSM_Analysis::setBranchAddress(TTree* BOOM)
@@ -299,6 +361,12 @@ void BSM_Analysis::setBranchAddress(TTree* BOOM)
   UncorrJet_pt = 0;
   Trigger_names = 0;
   Trigger_decision = 0;
+  Gen_pt = 0;
+  Gen_eta = 0;
+  Gen_phi = 0;
+  Gen_energy = 0;
+  Gen_pdg_id = 0;
+  Gen_status = 0;
   // Set branch addresses and branch pointers
   if(!BOOM) return;
   BOOM->SetBranchAddress("Trigger_names", &Trigger_names, &b_Trigger_names);
@@ -412,4 +480,11 @@ void BSM_Analysis::setBranchAddress(TTree* BOOM)
   BOOM->SetBranchAddress("Gen_Met", &Gen_Met, &b_Gen_Met);
   BOOM->SetBranchAddress("Met_shiftedPtUp", &Met_shiftedPtUp, &b_Met_shiftedPtUp);
   BOOM->SetBranchAddress("Met_shiftedPtDown", &Met_shiftedPtDown, &b_Met_shiftedPtDown);
+  BOOM->SetBranchAddress("Gen_pt", &Gen_pt, &b_Gen_pt);
+  BOOM->SetBranchAddress("Gen_eta", &Gen_eta, &b_Gen_eta);
+  BOOM->SetBranchAddress("Gen_phi", &Gen_phi, &b_Gen_phi);
+  BOOM->SetBranchAddress("Gen_energy", &Gen_energy, &b_Gen_energy);
+  BOOM->SetBranchAddress("Gen_pdg_id", &Gen_pdg_id, &b_Gen_pdg_id);
+  BOOM->SetBranchAddress("Gen_status", &Gen_status, &b_Gen_status);
+ 
 };
