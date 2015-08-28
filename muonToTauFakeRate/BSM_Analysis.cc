@@ -190,12 +190,12 @@ BSM_Analysis::BSM_Analysis(TFile* theFile, TDirectory *cdDir[], int nDir, char* 
       float diLepmass = (ProbeTau_TL_vec + TagMuon_TL_vec).M();
       for (int i = 0; i < nDir; i++){
 	_hmap_events[i]->Fill(0.0);
-	if ((pass_tau_id[i] == 1)){
+	if ((pass_tau_id[i] == 1) && (diLepmass > 10.0)){
 	  _hmap_events[i]->Fill(1.0);
 	  _hmap_diLepton_mass[i]->Fill(diLepmass);
 	  _hmap_probe_tau_pT[i]->Fill(ProbeTau_TL_vec.Pt());
 	  _hmap_probe_tau_eta[i]->Fill(ProbeTau_TL_vec.Eta());
-	} else if (pass_tau_id[i] == 0) {
+	} else if (pass_tau_id[i] == 0 && (diLepmass > 10.0)) {
 	  _hmap_events[i]->Fill(2.0);
 	  _hmap_diLepton_mass_fail[i]->Fill(diLepmass);
 	  _hmap_probe_tau_pT_fail[i]->Fill(ProbeTau_TL_vec.Pt());
